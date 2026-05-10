@@ -1,0 +1,41 @@
+{
+	"name": "data-pipeline",
+	"dockerComposeFile": "compose.yml",
+	"service": "devcontainer",
+	"workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
+	"remoteUser": "appuser",
+	"features": {
+		"ghcr.io/esimkowitz/devcontainer-features/fish-starship:1": {},
+		"ghcr.io/stuartleeks/dev-container-features/shell-history:0": {},
+		"ghcr.io/stu-bell/devcontainer-features/claude-code:0": {},
+		"ghcr.io/esimkowitz/devcontainer-features/claude-code-persistence:1": {}
+	},
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"ms-python.python",
+				"charliermarsh.ruff",
+				"usernamehw.errorlens",
+				"tamasfe.even-better-toml",
+				"ms-ossdata.vscode-pgsql",
+				"anthropic.claude-code"
+			],
+			"settings": {
+				"[python]": {
+					"editor.formatOnSave": true,
+					"editor.codeActionsOnSave": {
+						"source.fixAll": "explicit",
+						"source.organizeImports": "explicit"
+					},
+					"editor.defaultFormatter": "charliermarsh.ruff"
+				}
+			}
+		}
+	},
+	"forwardPorts": [
+		5050,
+		5432,
+		4222,
+		8222
+	]
+}

@@ -1,0 +1,49 @@
+name: data-pipeline
+
+services:
+  devcontainer:
+    build:
+      context: ..
+      dockerfile: .devcontainer/Dockerfile
+    volumes:
+      - ../..:/workspaces:cached
+    command: sleep infinity
+    network_mode: service:postgres
+
+  postgres:
+    image: docker.io/postgres:18.2
+    volumes:
+      - postgres:/var/lib/postgresql
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_DB: postgres
+      POSTGRES_PASSWORD: postgres
+
+  pgadmin:
+    image: docker.io/dpage/pgadmin4:9.14.0
+    environment:
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_SERVER_JSON_FILE: /pgadmin4/servers.json
+    volumes:
+      - pgadmin:/var/lib/pgadmin
+      - ./config/pgadmin.json:/pgadmin4/servers.json:ro
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+
+  nats:
+    image: docker.io/nats:2.14.0
+    command: ["-js", "-sd", "/data", "-m", "8222"]
+    volumes:
+      - nats:/data
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+
+volumes:
+  postgres:
+  pgadmin:
+  nats:
