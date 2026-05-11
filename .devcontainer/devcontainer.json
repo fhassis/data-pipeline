@@ -16,7 +16,8 @@
 				"usernamehw.errorlens",
 				"tamasfe.even-better-toml",
 				"ms-ossdata.vscode-pgsql",
-				"anthropic.claude-code"
+				"anthropic.claude-code",
+				"ms-azuretools.vscode-containers"
 			],
 			"settings": {
 				"terminal.integrated.defaultProfile.linux": "fish",
