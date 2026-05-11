@@ -8,3 +8,6 @@ wheels/
 
 # Virtual environments
 .venv
+
+# claude-code
+.claude/settings.local.json
