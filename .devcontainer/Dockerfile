@@ -15,7 +15,9 @@ FROM docker.io/python:${PYTHON_VERSION} AS base
 
 # Set environment variables for Python to improve behavior in containers.
 ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1
+    PYTHONDONTWRITEBYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_PYTHON_DOWNLOADS=never
 
 # Create non-root user and group with UID and GID 1000 (matches typical host user)
 RUN groupadd --gid 1000 appuser \
@@ -36,7 +38,7 @@ USER root
 
 # Install system tools only for the development environment
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    git curl gpg openssh-client \
+    git curl gpg openssh-client fish starship eza \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uv
@@ -58,6 +60,12 @@ RUN curl -fsSL https://github.com/nats-io/natscli/releases/download/v${NATS_VERS
 
 # Switch to non-root user
 USER appuser
+
+# Configure fish and starship for the rootless user
+RUN mkdir -p ~/.config && \
+    starship preset no-runtime-versions -o ~/.config/starship.toml
+COPY .devcontainer/config/config.fish /etc/fish/conf.d/config.fish
+ENV SHELL=/usr/bin/fish
 
 
 # =============================================================================

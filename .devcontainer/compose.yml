@@ -5,10 +5,10 @@ services:
     build:
       context: ..
       dockerfile: .devcontainer/Dockerfile
+      target: dev
     volumes:
       - ../..:/workspaces:cached
     command: sleep infinity
-    network_mode: service:postgres
 
   postgres:
     image: docker.io/postgres:18.2

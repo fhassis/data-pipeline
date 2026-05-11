@@ -4,12 +4,10 @@
 	"service": "devcontainer",
 	"workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
 	"remoteUser": "appuser",
-	"features": {
-		"ghcr.io/esimkowitz/devcontainer-features/fish-starship:1": {},
-		"ghcr.io/stuartleeks/dev-container-features/shell-history:0": {},
-		"ghcr.io/stu-bell/devcontainer-features/claude-code:0": {},
-		"ghcr.io/esimkowitz/devcontainer-features/claude-code-persistence:1": {}
-	},
+	"mounts": [
+		"source=${localEnv:HOME}/.claude,target=/home/appuser/.claude,type=bind",
+		"source=fish-history,target=/home/appuser/.local/share/fish,type=volume"
+	],
 	"customizations": {
 		"vscode": {
 			"extensions": [
@@ -21,6 +19,7 @@
 				"anthropic.claude-code"
 			],
 			"settings": {
+				"terminal.integrated.defaultProfile.linux": "fish",
 				"[python]": {
 					"editor.formatOnSave": true,
 					"editor.codeActionsOnSave": {
@@ -32,10 +31,6 @@
 			}
 		}
 	},
-	"forwardPorts": [
-		5050,
-		5432,
-		4222,
-		8222
-	]
+	"postCreateCommand": "uv sync --all-packages --all-groups",
+	"forwardPorts": []
 }
