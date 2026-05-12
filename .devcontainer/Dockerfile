@@ -69,6 +69,7 @@ USER appuser
 RUN mkdir -p ~/.config && \
     starship preset no-runtime-versions -o ~/.config/starship.toml
 COPY .devcontainer/config/config.fish /etc/fish/conf.d/config.fish
+RUN mkdir -p ~/.local/share/fish
 ENV SHELL=/usr/bin/fish
 
 
