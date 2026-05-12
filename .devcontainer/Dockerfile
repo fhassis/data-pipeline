@@ -38,8 +38,12 @@ USER root
 
 # Install system tools only for the development environment
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    git curl gpg openssh-client fish starship eza \
+    git curl gpg openssh-client fish starship eza locales \
+    && locale-gen en_US.UTF-8 \
     && rm -rf /var/lib/apt/lists/*
+
+ENV LANG=en_US.UTF-8 \
+    LC_ALL=en_US.UTF-8
 
 # Install uv
 COPY --from=uv /uv /uvx /bin/

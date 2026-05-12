@@ -1,0 +1,27 @@
+{
+    // VS Code debugger configuration for the pipeline workers.
+    // Select "Debug Pipeline" in the Run & Debug panel (Ctrl+Shift+D).
+    //
+    // Standard breakpoints work — the event loop runs in the main thread.
+    // Set a breakpoint in process_message() in any worker to inspect messages.
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug Pipeline",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "workers.main",
+            // cwd must point to the workers package so Python resolves imports correctly
+            "cwd": "${workspaceFolder}/packages/workers",
+            "env": {
+                "NATS_URL": "nats://localhost:4222",
+                "DATABASE_URL": "postgresql://postgres:postgres@localhost:5432/postgres",
+                "LOG_LEVEL": "DEBUG"
+            },
+            // Use the uv-managed venv for the workspace
+            "python": "${workspaceFolder}/.venv/bin/python",
+            "console": "integratedTerminal",
+            "justMyCode": false
+        }
+    ]
+}
