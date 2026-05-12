@@ -14,6 +14,9 @@ dependencies = [
     "uvloop>=0.22.1",
 ]
 
+[project.scripts]
+data-pipeline = "workers.main:run"
+
 [build-system]
 requires = ["uv_build>=0.11.7,<0.12.0"]
 build-backend = "uv_build"

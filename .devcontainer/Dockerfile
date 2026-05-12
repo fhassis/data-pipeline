@@ -102,4 +102,4 @@ COPY --chown=appuser:appuser . .
 
 ENV PATH="/home/appuser/app/.venv/bin:$PATH"
 
-# CMD ["python", "-m", "your_app"]
+CMD ["data-pipeline"]

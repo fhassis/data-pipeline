@@ -417,7 +417,7 @@ await self.publish(self._subject, json_encode(reading), stream="RAW")
 If the subject does not match the RAW stream's filter, nats-py raises
 immediately — useful for catching misconfiguration early.
 
-Two instances are created in `main.py` (`sensor_id="A"` and `sensor_id="B"`).
+In development, `main.py` creates two instances directly with `sensor_id="A"` and `sensor_id="B"`. In production, `sensor_id` comes from the `SENSOR_ID` environment variable — one Kubernetes deployment per sensor, all using `WORKER=producer` with a different `SENSOR_ID`.
 
 ---
 
@@ -509,29 +509,77 @@ when ready. No other changes needed.
 
 ## Step 13 — main.py
 
+`main.py` serves two modes depending on the `WORKER` environment variable.
+
+**Development mode** (`WORKER` unset) — all workers in one process:
+
 ```python
-workers: list[BaseWorker] = [
-    ProducerWorker(nats_url, sensor_id="A"),
-    ProducerWorker(nats_url, sensor_id="B"),
-    RawStoreWorker(nats_url, db),
-    ProcessorWorker(nats_url),
-    StoreWorker(nats_url, db),
-    NotificationWorker(nats_url),
-]
+async def _run_all(nats_url, db_url) -> None:
+    db = Database(db_url)       # one shared pool for the whole process
+    workers = [
+        ProducerWorker(nats_url, sensor_id="A"),
+        ProducerWorker(nats_url, sensor_id="B"),
+        RawStoreWorker(nats_url, db),
+        ProcessorWorker(nats_url),
+        StoreWorker(nats_url, db),
+        NotificationWorker(nats_url),
+    ]
+    await asyncio.gather(*[w.start() for w in workers])
 ```
 
-Both `RawStoreWorker` and `StoreWorker` receive the same `db` instance —
-the connection pool is shared.
-
-**uvloop** replaces asyncio's default event loop for better performance:
+**Production mode** (`WORKER` set) — one worker per container:
 
 ```python
-if __name__ == "__main__":
+async def _run_one(worker: BaseWorker) -> None:
+    # signal handling + start + stop for a single worker
+```
+
+```python
+def _build_worker(name: str, nats_url: str, db_url: str) -> BaseWorker:
+    match name:
+        case "producer":
+            sensor_id = os.environ["SENSOR_ID"]  # required for producer
+            return ProducerWorker(nats_url, sensor_id=sensor_id)
+        case "raw_store":
+            return RawStoreWorker(nats_url, Database(db_url))
+        case "processor":
+            return ProcessorWorker(nats_url)
+        case "store":
+            return StoreWorker(nats_url, Database(db_url))
+        case "notifier":
+            return NotificationWorker(nats_url)
+        case _:
+            raise ValueError(f"Unknown worker {name!r}")
+```
+
+Each production container instantiates its own `Database` — no pool sharing
+across containers. The `_` case raises `ValueError` immediately if `WORKER`
+is misspelled in a deployment manifest.
+
+**`run()` — the script entrypoint:**
+
+```python
+def run() -> None:
     configure_logging()
     uvloop.run(main())
 ```
 
-`uvloop.run()` is scoped to this coroutine — it does not mutate the global
+`run()` is the symbol registered as `data-pipeline` in `pyproject.toml`:
+
+```toml
+[project.scripts]
+data-pipeline = "workers.main:run"
+```
+
+`uv sync` during the Docker build stage installs this as
+`.venv/bin/data-pipeline` — a plain Python shim with no uv dependency.
+The runner image uses it as:
+
+```dockerfile
+CMD ["data-pipeline"]
+```
+
+`uvloop.run()` is scoped to this coroutine and does not mutate the global
 event loop policy, unlike `uvloop.install()`.
 
 ---
@@ -540,7 +588,11 @@ event loop policy, unlike `uvloop.install()`.
 
 ```bash
 uv sync --all-packages --all-groups
+```
 
+**Development — all workers in one process:**
+
+```bash
 # Pretty logs (requires kelora — see docs/useful_commands.md)
 uv run --package workers python -u -m workers.main | kelora
 
@@ -548,7 +600,19 @@ uv run --package workers python -u -m workers.main | kelora
 uv run --package workers python -m workers.main
 ```
 
-Every 2 seconds you should see:
+**Production — one worker per container (simulated locally):**
+
+```bash
+# Each command simulates one container
+WORKER=producer SENSOR_ID=A uv run --package workers data-pipeline
+WORKER=producer SENSOR_ID=B uv run --package workers data-pipeline
+WORKER=raw_store             uv run --package workers data-pipeline
+WORKER=processor             uv run --package workers data-pipeline
+WORKER=store                 uv run --package workers data-pipeline
+WORKER=notifier              uv run --package workers data-pipeline
+```
+
+Every 2 seconds you should see (development mode):
 1. `producer.published` × 2 (A and B)
 2. `raw_store.received` + `raw_store.persisted` + `raw_store.published` × 2
 3. `processor.received` + `processor.published` × 2
@@ -669,8 +733,9 @@ formatting then needs to clean up.
    `nats.disconnected` logs. Restart — `nats.reconnected` appears and the
    pipeline resumes. This is `max_reconnect_attempts=-1` in action.
 
-5. **Add a third sensor** — add `ProducerWorker(nats_url, sensor_id="C")`.
-   No other changes needed — wildcard consumers and subjects handle it.
+5. **Add a third sensor** — in development, add `ProducerWorker(nats_url, sensor_id="C")`
+   to `_run_all()`. In production, deploy another instance with `WORKER=producer SENSOR_ID=C`.
+   No other changes needed — wildcard consumers and subjects handle it automatically.
 
 6. **Verify UTC** — check that all `timestamp` and `received_at` values
    in pgAdmin show `+00` offset. Change the postgres container timezone and
@@ -679,3 +744,17 @@ formatting then needs to clean up.
 7. **Trigger the misconfiguration guard** — create a worker with only
    `STREAM` set and no `CONSUMER`. Observe the `ValueError` raised at
    instantiation before any network call is made.
+
+8. **Test the WORKER dispatcher** — run each worker individually using the
+   production mode commands from Step 14. Confirm each starts, subscribes
+   or publishes to the correct stream, and that an unknown value:
+   ```bash
+   WORKER=unknown uv run --package workers data-pipeline
+   ```
+   raises a `ValueError` immediately with a clear message listing valid values.
+
+9. **Verify SENSOR_ID is required** — run a producer without it:
+   ```bash
+   WORKER=producer uv run --package workers data-pipeline
+   ```
+   Confirm it raises `ValueError` before connecting to NATS.
