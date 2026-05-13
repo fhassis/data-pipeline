@@ -31,7 +31,7 @@ class RawStoreWorker(BaseWorker):
     def __init__(self, nats_url: str, db_url: str) -> None:
         super().__init__(nats_url)
         self._db = Database(db_url)
-        self._repo = SensorRepository()
+        self._repo = SensorRepository(self._db)
 
     async def on_start(self) -> None:
         # starts the database connection pool
@@ -56,12 +56,10 @@ class RawStoreWorker(BaseWorker):
 
         # --- Persist raw bytes — no parsing -----------------------------------
         try:
-            async with self._db.acquire() as conn:
-                raw_id = await self._repo.insert_raw(
-                    conn,
-                    subject=msg.subject,
-                    payload=msg.data.decode(),
-                )
+            raw_id = await self._repo.insert_raw_sensor(
+                subject=msg.subject,
+                payload=msg.data.decode(),
+            )
             self.logger.info("message.stored", raw_id=raw_id, subject=msg.subject)
 
         except Exception as e:

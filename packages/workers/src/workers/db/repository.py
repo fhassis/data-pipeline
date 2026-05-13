@@ -16,10 +16,10 @@ first and carries the generated raw_id forward in the NATS message.
 By the time StoreWorker calls insert(), the FK is already satisfied.
 """
 
-import asyncpg
 import structlog
 
 from shared.models import SensorData
+from workers.db.database import Database
 
 logger = structlog.get_logger(__name__)
 
@@ -28,16 +28,15 @@ class SensorRepository:
     """
     Wraps INSERT operations on raw_sensor_data and sensor_data.
 
-    Methods receive a connection rather than acquiring one, so the caller
-    controls the connection lifecycle.
+    Acquires connections from the pool internally — callers work with
+    domain objects and ids, not with connection handles.
     """
 
-    async def insert_raw(
-        self,
-        conn: asyncpg.Connection,
-        subject: str,
-        payload: str,
-    ) -> int:
+    def __init__(self, db: Database) -> None:
+        # stores the database pool to acquire connections per operation
+        self._db = db
+
+    async def insert_raw_sensor(self, subject: str, payload: str) -> int:
         """
         Persist the original producer message to raw_sensor_data.
 
@@ -47,23 +46,21 @@ class SensorRepository:
         asyncpg accepts a str for JSONB columns directly.
         Returns the generated id of the new row.
         """
-        raw_id: int = await conn.fetchval(
-            """
-            INSERT INTO raw_sensor_data (subject, payload)
-            VALUES ($1, $2)
-            RETURNING id
-            """,
-            subject,
-            payload,
-        )
+        # acquires a connection from the pool for this operation
+        async with self._db.acquire() as conn:
+            raw_id: int = await conn.fetchval(
+                """
+                INSERT INTO raw_sensor_data (subject, payload)
+                VALUES ($1, $2)
+                RETURNING id
+                """,
+                subject,
+                payload,
+            )
         logger.debug("db.insert_raw", id=raw_id, subject=subject)
         return raw_id
 
-    async def insert(
-        self,
-        conn: asyncpg.Connection,
-        reading: SensorData,
-    ) -> int:
+    async def insert_parsed_sensor(self, reading: SensorData) -> int:
         """
         Persist the parsed sensor reading to sensor_data.
 
@@ -73,17 +70,19 @@ class SensorRepository:
         asyncpg maps datetime(UTC) to TIMESTAMPTZ natively.
         Returns the generated id of the new row.
         """
-        row_id: int = await conn.fetchval(
-            """
-            INSERT INTO sensor_data (raw_id, sensor_id, timestamp, value)
-            VALUES ($1, $2, $3, $4)
-            RETURNING id
-            """,
-            reading.raw_id,
-            reading.sensor_id,
-            reading.timestamp,  # datetime(UTC) → TIMESTAMPTZ
-            reading.value,
-        )
+        # acquires a connection from the pool for this operation
+        async with self._db.acquire() as conn:
+            row_id: int = await conn.fetchval(
+                """
+                INSERT INTO sensor_data (raw_id, sensor_id, timestamp, value)
+                VALUES ($1, $2, $3, $4)
+                RETURNING id
+                """,
+                reading.raw_id,
+                reading.sensor_id,
+                reading.timestamp,  # datetime(UTC) → TIMESTAMPTZ
+                reading.value,
+            )
         logger.debug(
             "db.insert",
             id=row_id,

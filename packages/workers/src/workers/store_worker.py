@@ -30,7 +30,7 @@ class StoreWorker(BaseWorker):
     def __init__(self, nats_url: str, db_url: str) -> None:
         super().__init__(nats_url)
         self._db = Database(db_url)
-        self._repo = SensorRepository()
+        self._repo = SensorRepository(self._db)
 
     async def on_start(self) -> None:
         # starts the database connection pool
@@ -63,8 +63,7 @@ class StoreWorker(BaseWorker):
         # --- Persist -----------------------------------------------------------
         notification: Notification
         try:
-            async with self._db.acquire() as conn:
-                row_id = await self._repo.insert(conn, reading)
+            row_id = await self._repo.insert_parsed_sensor(reading)
 
             notification = Notification(
                 sensor_id=sensor_id,
