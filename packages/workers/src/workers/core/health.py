@@ -42,9 +42,7 @@ class WorkerHealth:
             return False
         if self.last_message_at is None:
             return True
-        stale = (
-            datetime.now(timezone.utc) - self.last_message_at
-        ).total_seconds() > 120
+        stale = (datetime.now(timezone.utc) - self.last_message_at).total_seconds() > 120
         return not stale
 
     def as_dict(self) -> dict:
@@ -59,8 +57,6 @@ class WorkerHealth:
             "worker": self.worker_name,
             "connected": self.connected,
             "started_at": self.started_at.isoformat(),
-            "last_message_at": self.last_message_at.isoformat()
-            if self.last_message_at
-            else None,
+            "last_message_at": self.last_message_at.isoformat() if self.last_message_at else None,
             "last_error": self.last_error,
         }

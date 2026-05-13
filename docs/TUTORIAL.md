@@ -329,9 +329,9 @@ One variable drives the health file path, health state, and logger name —
 no drift possible between them. Each worker gets its own health file:
 
 ```
-/tmp/worker_health_rawstoreworker
-/tmp/worker_health_processorworker
-/tmp/worker_health_storeworker
+/tmp/raw_store_worker_health
+/tmp/processor_worker_health
+/tmp/store_worker_health
 ...
 ```
 
@@ -340,7 +340,7 @@ no drift possible between them. Each worker gets its own health file:
 ```yaml
 livenessProbe:
   exec:
-    command: ["find", "/tmp/worker_health_rawstoreworker", "-mmin", "-1"]
+    command: ["find", "/tmp/raw_store_worker_health", "-mmin", "-1"]
 ```
 
 **Configuration validation at instantiation:**

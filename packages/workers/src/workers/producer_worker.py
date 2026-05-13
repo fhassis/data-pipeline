@@ -43,14 +43,14 @@ class ProducerWorker(BaseWorker):
         published subject: raw.sensor.<sensor_id>. In production, passed
         from the SENSOR_ID environment variable by main._build_worker().
     publish_interval:
-        Seconds between publications. Default: 2.
+        Seconds between publications. Default: 5.
     """
 
     def __init__(
         self,
         nats_url: str,
         sensor_id: str,
-        publish_interval: float = 2.0,
+        publish_interval: float = 5.0,
     ) -> None:
         super().__init__(nats_url)
         self._sensor_id = sensor_id
@@ -61,20 +61,18 @@ class ProducerWorker(BaseWorker):
         """
         Publish loop. Runs forever, publishing one reading per interval.
 
-        The reading value is randomised within [0.0, 50.0] to simulate a
-        real sensor. In production this would read from hardware or an
-        exchange WebSocket feed.
+        The reading value is randomised within [0.0, 50.0] to simulate a real sensor.
         """
-        self.logger.info(
-            "producer.started", sensor_id=self._sensor_id, subject=self._subject
-        )
+        self.logger.info("producer.running", sensor_id=self._sensor_id, subject=self._subject)
 
         while True:
+            # produces the sensor data
             reading = RawSensorData(
                 timestamp=int(time.time()),
                 value=round(random.uniform(0.0, 50.0), 2),
             )
 
+            # publishes the sensor data to NATS
             ack = await self.publish(self._subject, json_encode(reading), stream="RAW")
             if ack:
                 self.logger.info(
@@ -84,4 +82,5 @@ class ProducerWorker(BaseWorker):
                     seq=ack.seq,
                 )
 
+            # wait for the next publish interval
             await asyncio.sleep(self._publish_interval)

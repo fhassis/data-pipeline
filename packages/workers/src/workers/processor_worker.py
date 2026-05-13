@@ -17,7 +17,7 @@ import msgspec
 from msgspec.json import decode as json_decode
 from msgspec.json import encode as json_encode
 from nats.aio.msg import Msg
-from shared.models import RawSensorData, RawStoredEvent, SensorData
+from shared.models import RawStoredEvent, SensorData
 
 from workers.core import BaseWorker
 
@@ -28,12 +28,10 @@ class ProcessorWorker(BaseWorker):
 
     async def on_message(self, msg: Msg) -> None:
         """
-        Decode the RawStoredEvent envelope, decode the original producer
-        payload inside it, normalise to SensorData, and republish.
+        Decode the RawStoredEvent envelope, normalise to SensorData, and republish.
 
-        Two-stage decoding:
-          1. RawStoredEvent  — envelope added by RawStoreWorker
-          2. RawSensorData   — original producer payload inside the envelope
+        event.payload is already a RawSensorData struct (decoded by RawStoreWorker),
+        so no second decode is needed here.
 
         sensor_id is extracted from event.subject (the original RAW subject
         "raw.sensor.A"), not msg.subject (the RAW_STORED subject
@@ -51,20 +49,7 @@ class ProcessorWorker(BaseWorker):
                 raw_payload=msg.data.decode(errors="replace"),
                 error=str(e),
             )
-            await msg.nak(delay=5)
-            return
-
-        # --- Stage 2: decode the original producer payload --------------------
-        try:
-            raw: RawSensorData = json_decode(event.payload, type=RawSensorData)
-        except msgspec.DecodeError as e:
-            self.logger.error(
-                "processor.decode_error.payload",
-                subject=event.subject,
-                raw_payload=event.payload,
-                error=str(e),
-            )
-            await msg.nak(delay=5)
+            await self.send_to_dlq(msg)
             return
 
         # --- Normalise --------------------------------------------------------
@@ -73,8 +58,8 @@ class ProcessorWorker(BaseWorker):
         parsed = SensorData(
             raw_id=event.raw_id,
             sensor_id=sensor_id,
-            timestamp=datetime.fromtimestamp(raw.timestamp, tz=timezone.utc),
-            value=raw.value,
+            timestamp=datetime.fromtimestamp(event.payload.timestamp, tz=timezone.utc),
+            value=event.payload.value,
         )
 
         # --- Publish ----------------------------------------------------------
@@ -92,4 +77,4 @@ class ProcessorWorker(BaseWorker):
             )
             await msg.ack()
         else:
-            await msg.nak(delay=5)
+            await msg.nak(delay=self.NAK_DELAY)

@@ -13,9 +13,11 @@ Hybrid worker — consumes from RAW via the pull loop (STREAM + CONSUMER set)
 and publishes to RAW_STORED via publish(). Both mechanisms come from BaseWorker.
 """
 
+import msgspec
+from msgspec.json import decode as json_decode
 from msgspec.json import encode as json_encode
 from nats.aio.msg import Msg
-from shared.models import RawStoredEvent
+from shared.models import RawSensorData, RawStoredEvent
 
 from workers.core import BaseWorker
 from workers.db.database import Database
@@ -42,7 +44,7 @@ class RawStoreWorker(BaseWorker):
         scale. Add deduplication if needed.
         """
         sensor_id = msg.subject.split(".")[-1]
-        self.logger.info("raw_store.received", subject=msg.subject, sensor_id=sensor_id)
+        self.logger.info("message.received", subject=msg.subject, sensor_id=sensor_id)
 
         # --- Persist raw bytes — no parsing -----------------------------------
         try:
@@ -52,28 +54,35 @@ class RawStoreWorker(BaseWorker):
                     subject=msg.subject,
                     payload=msg.data.decode(),
                 )
-            self.logger.info("raw_store.persisted", raw_id=raw_id, subject=msg.subject)
+            self.logger.info("message.stored", raw_id=raw_id, subject=msg.subject)
 
         except Exception as e:
-            self.logger.error("raw_store.db_error", subject=msg.subject, error=str(e))
-            await msg.nak(delay=5)
+            self.logger.error("message.store_failed", subject=msg.subject, error=str(e))
+            await msg.nak(delay=self.NAK_DELAY)
             return
 
         # --- Republish with raw_id -------------------------------------------
-        event = RawStoredEvent(
-            raw_id=raw_id,
-            subject=msg.subject,
-            payload=msg.data.decode(),
-        )
+        try:
+            event = RawStoredEvent(
+                raw_id=raw_id,
+                subject=msg.subject,
+                payload=json_decode(msg.data, type=RawSensorData),
+            )
+        except msgspec.DecodeError as e:
+            self.logger.error("message.decode_error", subject=msg.subject, error=str(e))
+            await self.send_to_dlq(msg)
+            return
+
+        # publish the event with the generated raw_id so downstream workers can resolve the FK
         out_subject = f"raw_stored.sensor.{sensor_id}"
         ack = await self.publish(out_subject, json_encode(event), stream="RAW_STORED")
         if ack:
             self.logger.info(
-                "raw_store.published",
+                "message.published",
                 subject=out_subject,
                 raw_id=raw_id,
                 seq=ack.seq,
             )
             await msg.ack()
         else:
-            await msg.nak(delay=5)
+            await msg.nak(delay=self.NAK_DELAY)

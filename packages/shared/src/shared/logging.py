@@ -21,9 +21,7 @@ from structlog.stdlib import (
 )
 
 
-def _add_otel_context(
-    logger: Any, method: str, event_dict: dict[str, Any]
-) -> dict[str, Any]:
+def _add_otel_context(logger: Any, method: str, event_dict: dict[str, Any]) -> dict[str, Any]:
     """Inject OTel trace_id and span_id into each log record.
 
     No-op when there is no active span so it is safe to call unconditionally.
@@ -81,7 +79,7 @@ def configure_logging() -> None:
             # hands off to ProcessorFormatter so stdlib and structlog paths share a renderer
             ProcessorFormatter.wrap_for_formatter,
         ],
-        # stdlib-compatible bound logger so FastStream / third-party libs can receive it as a drop-in logger
+        # stdlib-compatible bound logger so third-party libs can receive it as a drop-in logger
         wrapper_class=BoundLogger,
         # plain dict for per-logger bound context
         context_class=dict,
@@ -90,8 +88,7 @@ def configure_logging() -> None:
     )
 
     # single formatter used by the stdlib StreamHandler — renders both structlog-origin
-    # records (handed off via wrap_for_formatter) and foreign stdlib-origin records (like
-    # FastStream's internal "app starting..." lines) as JSON
+    # records (handed off via wrap_for_formatter) and foreign stdlib-origin records as JSON
     formatter = ProcessorFormatter(
         processors=[
             # strips ProcessorFormatter's internal metadata keys before rendering

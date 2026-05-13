@@ -18,6 +18,8 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_DB: postgres
       POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
 
   pgadmin:
     image: docker.io/dpage/pgadmin4:9.15.0
@@ -42,6 +44,15 @@ services:
     ports:
       - "4222:4222"
       - "8222:8222"
+
+  nui:
+    image: ghcr.io/nats-nui/nui:0.9.2
+    ports:
+      - "31311:31311"
+    environment:
+      - NUI_NATS_SERVERS=nats://nats:4222
+    depends_on:
+      - nats
 
 volumes:
   postgres:

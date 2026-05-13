@@ -24,7 +24,7 @@ from workers.core import BaseWorker
 
 class NotificationWorker(BaseWorker):
     STREAM = "NOTIFICATIONS"
-    CONSUMER = "notifier"
+    CONSUMER = "notification"
 
     async def on_message(self, msg: Msg) -> None:
         """
@@ -33,9 +33,7 @@ class NotificationWorker(BaseWorker):
         try:
             notif: Notification = json_decode(msg.data, type=Notification)
         except msgspec.DecodeError as e:
-            self.logger.error(
-                "notifier.decode_error", subject=msg.subject, error=str(e)
-            )
+            self.logger.error("notifier.decode_error", subject=msg.subject, error=str(e))
             await msg.ack()
             return
 

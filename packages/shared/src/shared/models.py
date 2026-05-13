@@ -66,22 +66,22 @@ class RawSensorData(msgspec.Struct, frozen=True, rename=_raw_rename):
 class RawStoredEvent(msgspec.Struct, frozen=True):
     """
     Published by RawStoreWorker after inserting the raw message into
-    raw_sensor_data. Carries the generated database ID and the original
-    producer bytes forward so the rest of the pipeline can:
-      - decode and process the original payload (ProcessorWorker)
+    raw_sensor_data. Carries the generated database ID and the decoded
+    producer payload forward so the rest of the pipeline can:
+      - process the reading directly (ProcessorWorker)
       - resolve the FK when writing sensor_data (StoreWorker via SensorData)
 
     Example:
         {
           "raw_id": 42,
           "subject": "raw.sensor.A",
-          "payload": "{\"t\":1718000000,\"d\":23.47}"
+          "payload": {"t": 1718000000, "d": 23.47}
         }
     """
 
     raw_id: int  # PK from raw_sensor_data — used as FK in sensor_data
     subject: str  # Original NATS subject (e.g. "raw.sensor.A")
-    payload: str  # Original producer JSON, byte-for-byte as published
+    payload: RawSensorData  # Decoded once in RawStoreWorker; serialises as a JSON object
 
 
 class SensorData(msgspec.Struct, frozen=True):

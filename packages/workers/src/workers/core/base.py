@@ -50,6 +50,7 @@ from nats.js import JetStreamContext
 from nats.js.api import PubAck
 
 from workers.core.health import WorkerHealth
+from workers.core.utils import to_snake_case
 
 
 class BaseWorker:
@@ -93,6 +94,8 @@ class BaseWorker:
     # Pull loop tuning — override per worker class if needed.
     FETCH_BATCH: ClassVar[int] = 10
     FETCH_TIMEOUT: ClassVar[float] = 5.0
+    NAK_DELAY: ClassVar[float] = 5.0
+    RECONNECT_DELAY: ClassVar[float] = 1.0
 
     # How often the heartbeat loop touches the health file (seconds).
     # The Kubernetes liveness probe window should be 2-3x this value.
@@ -114,22 +117,25 @@ class BaseWorker:
             together to activate the pull loop, or both left as None for
             a producer that overrides run().
         """
-        worker_name = type(self).__name__
+        # forms the worker name based on the class name in snake_case
+        self.name = to_snake_case(type(self).__name__)
 
+        # Validate that STREAM and CONSUMER are either both set or both None.
         if bool(self.STREAM) ^ bool(self.CONSUMER):
             raise ValueError(
-                f"{worker_name} has only one of STREAM or CONSUMER set "
+                f"{self.name} has only one of STREAM or CONSUMER set "
                 f"(STREAM={self.STREAM!r}, CONSUMER={self.CONSUMER!r}). "
                 f"Either set both to activate the pull loop, or set neither "
                 f"and override run()."
             )
 
+        # initializes instance variables
         self._nats_url = nats_url
-        self._health_file = Path(f"/tmp/worker_health_{worker_name.lower()}")
+        self._health_file = Path(f"/tmp/{self.name.lower()}_health")
         self._nc: NATSClient | None = None
         self._js: JetStreamContext | None = None
-        self.health = WorkerHealth(worker_name=worker_name)
-        self.logger = structlog.get_logger(worker_name)
+        self.health = WorkerHealth(worker_name=self.name)
+        self.logger = structlog.get_logger(self.name)
 
     # -------------------------------------------------------------------------
     # Public API
@@ -147,12 +153,16 @@ class BaseWorker:
 
         Never override this method. Use on_start() for extra setup logic.
         """
+        # connects to NATS and initializes JetStream context
         await self._connect()
-        asyncio.create_task(
-            self._heartbeat_loop(),
-            name=f"{type(self).__name__}_heartbeat",
-        )
+
+        # starts the heartbeat loop in the background to update health state
+        asyncio.create_task(self._heartbeat_loop(), name=f"{self.name}_heartbeat_loop")
+
+        # calls the on_start() hook for optional extra setup
         await self.on_start()
+
+        # enters the main loop
         self.logger.info("worker.started")
         await self.run()
 
@@ -270,8 +280,7 @@ class BaseWorker:
             routing metadata such as sensor_id.
         """
         raise NotImplementedError(
-            f"{type(self).__name__} must implement on_message() "
-            f"when STREAM and CONSUMER are set."
+            f"{type(self).__name__} must implement on_message() when STREAM and CONSUMER are set."
         )
 
     # -------------------------------------------------------------------------
@@ -347,29 +356,66 @@ class BaseWorker:
         of message activity.
         """
         sub = await self._js.pull_subscribe_bind(self.CONSUMER, stream=self.STREAM)
-        self.logger.info(
-            "consumer.subscribed", stream=self.STREAM, consumer=self.CONSUMER
-        )
+        self.logger.info("consumer.subscribed", stream=self.STREAM, consumer=self.CONSUMER)
 
         while True:
             try:
+                # fetches a batch of messages
                 msgs = await sub.fetch(
                     batch=self.FETCH_BATCH,
                     timeout=self.FETCH_TIMEOUT,
                 )
             except nats.errors.TimeoutError:
-                # Normal idle condition — no messages in the fetch window.
+                # Normal idle condition — no messages in the fetch window
                 continue
             except nats.errors.ConnectionClosedError:
                 # TCP dropped — nats-py is reconnecting in the background.
                 # Sleep briefly to avoid a tight spin loop before retrying.
                 self.logger.warning("consumer.connection_closed")
-                await asyncio.sleep(1)
+                await asyncio.sleep(self.RECONNECT_DELAY)
                 continue
 
+            # iterates over received messages
             for msg in msgs:
+                # uddate health with the timestamp of the last received message
                 self.health.last_message_at = datetime.now(timezone.utc)
-                await self.on_message(msg)
+
+                try:
+                    # delivers the message to the worker's on_message() implementation
+                    await self.on_message(msg)
+                except Exception as e:
+                    # logs the error
+                    self.logger.error("on_message.exception", subject=msg.subject, error=str(e))
+
+                    # nacks the message for redelivery after a delay
+                    await msg.nak(delay=self.NAK_DELAY)
+
+    async def send_to_dlq(self, msg: Msg) -> None:
+        """
+        Route an unrecoverable message to the DLQ stream and ack the original.
+
+        Call this from on_message() for errors that will never resolve on retry
+        (bad payload, schema mismatch). Do NOT call for transient failures
+        (DB down, network error) — nack those so NATS retries indefinitely.
+
+        The DLQ subject mirrors the original: dlq.raw.sensor.A, etc.
+        The original payload is forwarded as-is for inspection and replay.
+        """
+        # forms a subject like "dlq.raw.sensor.A" from "raw.sensor.A"
+        dlq_subject = f"dlq.{msg.subject}"
+
+        # publishes to the DLQ stream
+        ack = await self.publish(dlq_subject, msg.data, stream="DLQ")
+
+        # logs the ack result
+        self.logger.error(
+            "message.dlqed" if ack else "message.dlq_publish_failed",
+            original_subject=msg.subject,
+            num_delivered=msg.metadata.num_delivered,
+        )
+
+        # acks the original message to prevent redelivery
+        await msg.ack()
 
     async def _heartbeat_loop(self) -> None:
         """
@@ -388,6 +434,9 @@ class BaseWorker:
         richer diagnostics without changing this logic.
         """
         while True:
+            # update liveliness file if healthy
             if self.health.is_healthy:
                 self._health_file.touch()
+
+            # sleep until the next heartbeat
             await asyncio.sleep(self.HEARTBEAT_INTERVAL)

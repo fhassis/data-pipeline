@@ -1,27 +1,84 @@
 {
-    // VS Code debugger configuration for the pipeline workers.
-    // Select "Debug Pipeline" in the Run & Debug panel (Ctrl+Shift+D).
-    //
-    // Standard breakpoints work — the event loop runs in the main thread.
-    // Set a breakpoint in process_message() in any worker to inspect messages.
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Debug Pipeline",
+            "name": "all_workers",
             "type": "debugpy",
             "request": "launch",
             "module": "workers.main",
-            // cwd must point to the workers package so Python resolves imports correctly
             "cwd": "${workspaceFolder}/packages/workers",
             "env": {
-                "NATS_URL": "nats://localhost:4222",
-                "DATABASE_URL": "postgresql://postgres:postgres@localhost:5432/postgres",
-                "LOG_LEVEL": "DEBUG"
+                "WORKER_TYPE": "all"
             },
-            // Use the uv-managed venv for the workspace
             "python": "${workspaceFolder}/.venv/bin/python",
             "console": "integratedTerminal",
             "justMyCode": false
-        }
+        },
+        {
+            "name": "producer_worker",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "workers.main",
+            "cwd": "${workspaceFolder}/packages/workers",
+            "env": {
+                "WORKER_TYPE": "producer",
+                "SENSOR_ID": "F"
+            },
+            "python": "${workspaceFolder}/.venv/bin/python",
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
+            "name": "raw_store_worker",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "workers.main",
+            "cwd": "${workspaceFolder}/packages/workers",
+            "env": {
+                "WORKER_TYPE": "raw_store"
+            },
+            "python": "${workspaceFolder}/.venv/bin/python",
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
+            "name": "processor_worker",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "workers.main",
+            "cwd": "${workspaceFolder}/packages/workers",
+            "env": {
+                "WORKER_TYPE": "processor"
+            },
+            "python": "${workspaceFolder}/.venv/bin/python",
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
+            "name": "store_worker",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "workers.main",
+            "cwd": "${workspaceFolder}/packages/workers",
+            "env": {
+                "WORKER_TYPE": "store"
+            },
+            "python": "${workspaceFolder}/.venv/bin/python",
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
+            "name": "notification_worker",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "workers.main",
+            "cwd": "${workspaceFolder}/packages/workers",
+            "env": {
+                "WORKER_TYPE": "notifier"
+            },
+            "python": "${workspaceFolder}/.venv/bin/python",
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
     ]
 }

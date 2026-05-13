@@ -39,7 +39,8 @@ USER root
 # Install system tools only for the development environment
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git curl gpg openssh-client fish starship eza locales \
-    && locale-gen en_US.UTF-8 \
+    && echo "en_US.UTF-8 UTF-8" > /etc/locale.gen \
+    && locale-gen \
     && rm -rf /var/lib/apt/lists/*
 
 ENV LANG=en_US.UTF-8 \

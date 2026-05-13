@@ -41,7 +41,7 @@ $NATS stream add RAW \
   --replicas=1 \
   --retention=limits \
   --discard=old \
-  --max-age=1h \
+  --max-age=0 \
   --dupe-window=2m \
   --defaults 2>/dev/null || echo "    (already exists, skipping)"
 
@@ -52,7 +52,7 @@ $NATS stream add RAW_STORED \
   --replicas=1 \
   --retention=limits \
   --discard=old \
-  --max-age=1h \
+  --max-age=0 \
   --dupe-window=2m \
   --defaults 2>/dev/null || echo "    (already exists, skipping)"
 
@@ -63,7 +63,7 @@ $NATS stream add PARSED \
   --replicas=1 \
   --retention=limits \
   --discard=old \
-  --max-age=1h \
+  --max-age=0 \
   --dupe-window=2m \
   --defaults 2>/dev/null || echo "    (already exists, skipping)"
 
@@ -74,8 +74,18 @@ $NATS stream add NOTIFICATIONS \
   --replicas=1 \
   --retention=limits \
   --discard=old \
-  --max-age=1h \
+  --max-age=0 \
   --dupe-window=2m \
+  --defaults 2>/dev/null || echo "    (already exists, skipping)"
+
+echo ">>> Creating stream: DLQ"
+$NATS stream add DLQ \
+  --subjects="dlq.>" \
+  --storage=file \
+  --replicas=1 \
+  --retention=limits \
+  --discard=old \
+  --max-age=0 \
   --defaults 2>/dev/null || echo "    (already exists, skipping)"
 
 # =============================================================================
@@ -87,7 +97,7 @@ $NATS stream add NOTIFICATIONS \
 # raw_store  → RAW stream        (RawStoreWorker)
 # processor  → RAW_STORED stream (ProcessorWorker)
 # store      → PARSED stream     (StoreWorker)
-# notifier   → NOTIFICATIONS     (NotificationWorker)
+# notification   → NOTIFICATIONS     (NotificationWorker)
 # =============================================================================
 
 echo ""
@@ -97,7 +107,7 @@ $NATS consumer add RAW raw_store \
   --deliver=all \
   --ack=explicit \
   --replay=instant \
-  --max-deliver=5 \
+  --max-deliver=-1 \
   --defaults 2>/dev/null || echo "    (already exists, skipping)"
 
 echo ">>> Creating consumer: processor on stream RAW_STORED"
@@ -106,7 +116,7 @@ $NATS consumer add RAW_STORED processor \
   --deliver=all \
   --ack=explicit \
   --replay=instant \
-  --max-deliver=5 \
+  --max-deliver=-1 \
   --defaults 2>/dev/null || echo "    (already exists, skipping)"
 
 echo ">>> Creating consumer: store on stream PARSED"
@@ -115,16 +125,16 @@ $NATS consumer add PARSED store \
   --deliver=all \
   --ack=explicit \
   --replay=instant \
-  --max-deliver=5 \
+  --max-deliver=-1 \
   --defaults 2>/dev/null || echo "    (already exists, skipping)"
 
-echo ">>> Creating consumer: notifier on stream NOTIFICATIONS"
-$NATS consumer add NOTIFICATIONS notifier \
+echo ">>> Creating consumer: notification on stream NOTIFICATIONS"
+$NATS consumer add NOTIFICATIONS notification \
   --pull \
   --deliver=all \
   --ack=explicit \
   --replay=instant \
-  --max-deliver=5 \
+  --max-deliver=-1 \
   --defaults 2>/dev/null || echo "    (already exists, skipping)"
 
 # =============================================================================

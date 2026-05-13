@@ -83,9 +83,7 @@ class StoreWorker(BaseWorker):
 
         # --- Publish notification ----------------------------------------------
         notif_subject = f"notifications.sensor.{sensor_id}"
-        await self.publish(
-            notif_subject, json_encode(notification), stream="NOTIFICATIONS"
-        )
+        await self.publish(notif_subject, json_encode(notification), stream="NOTIFICATIONS")
         self.logger.info(
             "store.notification_published",
             subject=notif_subject,

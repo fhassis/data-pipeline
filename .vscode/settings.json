@@ -1,0 +1,7 @@
+{
+    "terminal.integrated.env.linux": {
+        "NATS_URL": "nats://nats:4222",
+        "DATABASE_URL": "postgresql://postgres:postgres@postgres:5432/postgres",
+        "LOG_LEVEL": "DEBUG"
+    }
+}

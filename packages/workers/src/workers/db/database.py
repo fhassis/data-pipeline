@@ -18,7 +18,7 @@ from typing import AsyncIterator
 import asyncpg
 import structlog
 
-logger = structlog.get_logger(__name__)
+logger = structlog.get_logger("workers_db")
 
 
 class Database:
@@ -43,13 +43,13 @@ class Database:
                 "timezone": "UTC",
             },
         )
-        logger.info("db.pool.started", dsn=self._dsn)
+        logger.info("db.started", dsn=self._dsn)
 
     async def stop(self) -> None:
         """Close all pool connections. Call once at application shutdown."""
         if self._pool:
             await self._pool.close()
-            logger.info("db.pool.stopped")
+            logger.info("db.stopped")
 
     @asynccontextmanager
     async def acquire(self) -> AsyncIterator[asyncpg.Connection]:
