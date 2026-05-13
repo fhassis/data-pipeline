@@ -6,6 +6,7 @@ from typing import Any
 from msgspec.json import encode as msgspec_encode
 from opentelemetry import trace
 from structlog import configure
+from structlog.dev import ConsoleRenderer
 from structlog.processors import (
     ExceptionRenderer,
     JSONRenderer,
@@ -87,15 +88,23 @@ def configure_logging() -> None:
         logger_factory=LoggerFactory(),
     )
 
+    # LOG_FORMAT=console enables human-readable coloured output for local dev;
+    dev_console = os.environ.get("LOG_FORMAT", "").lower() == "console"
+
+    if dev_console:
+        # ordered, coloured output: timestamp | LEVEL | event | logger | key=value …
+        final_renderer = ConsoleRenderer()
+    else:
+        # production: compact JSON via msgspec
+        final_renderer = JSONRenderer(serializer=lambda obj, **_: msgspec_encode(obj).decode())
+
     # single formatter used by the stdlib StreamHandler — renders both structlog-origin
-    # records (handed off via wrap_for_formatter) and foreign stdlib-origin records as JSON
+    # records (handed off via wrap_for_formatter) and foreign stdlib-origin records
     formatter = ProcessorFormatter(
         processors=[
             # strips ProcessorFormatter's internal metadata keys before rendering
             ProcessorFormatter.remove_processors_meta,
-            # final step: serialise the event dict to a JSON string.
-            # msgspec is faster than stdlib json; decode bytes→str for stdlib logging compatibility
-            JSONRenderer(serializer=lambda obj, **_: msgspec_encode(obj).decode()),
+            final_renderer,
         ],
         # applied only to foreign (stdlib-origin) records so they get the same fields
         foreign_pre_chain=shared_processors,
