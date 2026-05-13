@@ -38,7 +38,6 @@ import structlog
 import uvloop
 from shared.logging import configure_logging
 
-from workers.db.database import Database
 from workers.notification_worker import NotificationWorker
 from workers.processor_worker import ProcessorWorker
 from workers.producer_worker import ProducerWorker
@@ -58,10 +57,6 @@ async def main() -> None:
         "postgresql://postgres:postgres@postgres:5432/postgres",
     )
 
-    # create the database repository and start the connection pool
-    db = Database(db_url)
-    await db.start()
-
     # get the worker type from the environment
     worker_type = os.environ.get("WORKER_TYPE")
     if not worker_type:
@@ -79,15 +74,15 @@ async def main() -> None:
             workers.append(ProducerWorker(nats_url, sensor_id=sensor_id))
 
         case "raw_store":
-            workers.append(RawStoreWorker(nats_url, db))
+            workers.append(RawStoreWorker(nats_url, db_url))
 
         case "processor":
             workers.append(ProcessorWorker(nats_url))
 
         case "store":
-            workers.append(StoreWorker(nats_url, db))
+            workers.append(StoreWorker(nats_url, db_url))
 
-        case "notifier":
+        case "notification":
             workers.append(NotificationWorker(nats_url))
 
         case "all":
@@ -95,9 +90,9 @@ async def main() -> None:
                 [
                     ProducerWorker(nats_url, sensor_id="A"),
                     ProducerWorker(nats_url, sensor_id="B"),
-                    RawStoreWorker(nats_url, db),
+                    RawStoreWorker(nats_url, db_url),
                     ProcessorWorker(nats_url),
-                    StoreWorker(nats_url, db),
+                    StoreWorker(nats_url, db_url),
                     NotificationWorker(nats_url),
                 ]
             )
@@ -105,7 +100,7 @@ async def main() -> None:
         case _:
             raise ValueError(
                 f"Unknown worker {worker_type!r}. "
-                f"Valid values: producer, raw_store, processor, store, notifier, all."
+                f"Valid values: producer, raw_store, processor, store, notification, all."
             )
 
     # create the event loop and register tasks
@@ -128,10 +123,9 @@ async def main() -> None:
     except asyncio.CancelledError:
         logger.info("pipeline.cancelled")
     finally:
-        # stop workers and database connection pool
+        # stop all workers (each worker closes its own resources via on_stop)
         for worker in workers:
             await worker.stop()
-        await db.stop()
         logger.info("pipeline.stopped")
 
 

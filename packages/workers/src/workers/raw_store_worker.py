@@ -28,10 +28,18 @@ class RawStoreWorker(BaseWorker):
     STREAM = "RAW"
     CONSUMER = "raw_store"
 
-    def __init__(self, nats_url: str, db: Database) -> None:
+    def __init__(self, nats_url: str, db_url: str) -> None:
         super().__init__(nats_url)
-        self._db = db
+        self._db = Database(db_url)
         self._repo = SensorRepository()
+
+    async def on_start(self) -> None:
+        # starts the database connection pool
+        await self._db.start()
+
+    async def on_stop(self) -> None:
+        # closes the database connection pool
+        await self._db.stop()
 
     async def on_message(self, msg: Msg) -> None:
         """

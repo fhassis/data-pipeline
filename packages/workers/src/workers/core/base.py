@@ -174,6 +174,8 @@ class BaseWorker:
         processed before closing the connection, preserving at-least-once
         delivery guarantees.
         """
+        # calls the on_stop() hook for optional extra teardown (e.g. closing DB pools)
+        await self.on_stop()
         if self._nc:
             await self._nc.drain()
         self.logger.info("worker.stopped")
@@ -232,7 +234,16 @@ class BaseWorker:
         Optional extra setup after the NATS connection is ready.
 
         Called by start() before run(). Override to load runtime config,
-        warm caches, initialise database repositories, etc.
+        warm caches, initialise database pools, etc.
+        No need to call super() — base implementation is a deliberate no-op.
+        """
+
+    async def on_stop(self) -> None:
+        """
+        Optional teardown before the NATS connection is drained.
+
+        Called by stop() before drain(). Override to close database pools
+        or release other resources acquired in on_start().
         No need to call super() — base implementation is a deliberate no-op.
         """
 

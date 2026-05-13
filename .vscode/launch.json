@@ -74,7 +74,7 @@
             "module": "workers.main",
             "cwd": "${workspaceFolder}/packages/workers",
             "env": {
-                "WORKER_TYPE": "notifier"
+                "WORKER_TYPE": "notification"
             },
             "python": "${workspaceFolder}/.venv/bin/python",
             "console": "integratedTerminal",
